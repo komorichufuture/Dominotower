@@ -218,6 +218,23 @@
             }
         });
 
+        // スマホ判定（スマホだけ3レーン難易度に分岐）
+        const isMobile = window.matchMedia('(max-width: 600px)').matches;
+
+        // スマホ用：3レーン（左=Easy / 中=Normal / 右=Hard）
+        const laneXRatios = [0.25, 0.5, 0.75];
+        function snapToLaneX(x) {
+            if (!isMobile) return x;
+            let best = laneXRatios[0] * render.options.width;
+            let bestDist = Math.abs(x - best);
+            for (let i = 1; i < laneXRatios.length; i++) {
+                const lx = laneXRatios[i] * render.options.width;
+                const d = Math.abs(x - lx);
+                if (d < bestDist) { bestDist = d; best = lx; }
+            }
+            return best;
+        }
+
         // 地面を作成
         const ground = Bodies.rectangle(425, 490, 850, 20, { 
             isStatic: true,
@@ -260,14 +277,52 @@
 
         // 初期配置：縦6個×横10列のドミノを作成
         function createInitialDominoes() {
-            const rows = 6; // 縦に積む数
-            const cols = 10; // 横の列数
             const dominoWidth = 15;
             const dominoHeight = 80;
-            const startX = 100; // 開始位置X
             const startY = 400; // 開始位置Y（地面から少し上）
-            const spacingX = 70; // 列間の間隔
             const spacingY = dominoHeight + 2; // 縦の間隔（少し重ねる）
+
+            // スマホ版：3レーンに難易度を振り分け（左=Easy / 中=Normal / 右=Hard）
+            if (isMobile) {
+                const rowsByLane = [4, 6, 8];
+                const laneColors = ['#4CAF50', '#FFC107', '#F44336']; // 緑/黄/赤
+                const lanePhysics = [
+                    { friction: 0.9, restitution: 0.05, angleJitter: 0.0 },   // Easy: 安定
+                    { friction: 0.8, restitution: 0.1,  angleJitter: 0.01 },  // Normal
+                    { friction: 0.6, restitution: 0.15, angleJitter: 0.03 }   // Hard: ちょい不安定
+                ];
+
+                for (let lane = 0; lane < 3; lane++) {
+                    const x = laneXRatios[lane] * render.options.width;
+                    for (let row = 0; row < rowsByLane[lane]; row++) {
+                        const y = startY - row * spacingY;
+                        const p = lanePhysics[lane];
+                        const domino = Bodies.rectangle(x, y, dominoWidth, dominoHeight, {
+                            density: 0.005,
+                            friction: p.friction,
+                            restitution: p.restitution,
+                            render: { fillStyle: laneColors[lane] }
+                        });
+
+                        // Hardほど、ほんの少しだけ初期角度に揺らぎ（スマホの「難しい感」）
+                        if (p.angleJitter > 0) {
+                            const a = (Math.random() * 2 - 1) * p.angleJitter;
+                            Body.setAngle(domino, a);
+                        }
+
+                        domino.isInitial = true;
+                        dominoes.push(domino);
+                        World.add(world, domino);
+                    }
+                }
+                return;
+            }
+
+            // PC版：縦6個×横10列のドミノを作成（従来どおり）
+            const rows = 6; // 縦に積む数
+            const cols = 10; // 横の列数
+            const startX = 100; // 開始位置X
+            const spacingX = 70; // 列間の間隔
 
             const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788'];
 
@@ -371,7 +426,8 @@
             if (mode === 'place') {
                 // ドミノを配置（地面より上にのみ）
                 if (y < 450) {
-                    createDomino(x, y);
+                    const sx = snapToLaneX(x);
+                    createDomino(sx, y);
                 }
             } else if (mode === 'ball') {
                 // ボールを投下
