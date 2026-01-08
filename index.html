@@ -26,6 +26,31 @@
             width: 100%;
         }
         
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            #container {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 22px;
+                margin-bottom: 15px;
+            }
+            
+            button {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+            
+            #score > div {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+        
         h1 {
             text-align: center;
             color: #333;
@@ -189,7 +214,7 @@
             <h3>📖 遊び方</h3>
             <ul>
                 <li><strong>目標:</strong> 初期配置のドミノを崩さずに、できるだけ多くのドミノを追加しよう！</li>
-                <li><strong>初期配置:</strong> 縦6個×横10列のカラフルなドミノタワーが配置されています</li>
+                <li><strong>初期配置:</strong> カラフルなドミノタワーが配置されています（PC:縦6個×横10列、スマホ:縦6個×横3列）</li>
                 <li><strong>追加ドミノ:</strong> クリックで緑色のドミノを追加できます（倒れずに置けた数がスコアになります）</li>
                 <li><strong>ボール投下:</strong> モードを切り替えてボールを落とせます（投下した数もカウントされます）</li>
                 <li><strong>ゲームオーバー:</strong> 初期配置のドミノが倒れるとゲームオーバー</li>
@@ -201,42 +226,33 @@
     <script>
         const { Engine, Render, World, Bodies, Mouse, MouseConstraint, Runner, Body, Events } = Matter;
 
+        // 画面サイズに応じた設定
+        const isMobile = window.innerWidth < 768;
+        const canvasWidth = isMobile ? Math.min(window.innerWidth - 40, 400) : 850;
+        const canvasHeight = isMobile ? 600 : 500;
+
         // エンジンとレンダラーの作成
         const engine = Engine.create();
         const world = engine.world;
         world.gravity.y = 1;
 
         const canvas = document.getElementById('gameCanvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        
         const render = Render.create({
             canvas: canvas,
             engine: engine,
             options: {
-                width: 850,
-                height: 500,
+                width: canvasWidth,
+                height: canvasHeight,
                 wireframes: false,
                 background: 'transparent'
             }
         });
 
-        // スマホ判定（スマホだけ3レーン難易度に分岐）
-        const isMobile = window.matchMedia('(max-width: 600px)').matches;
-
-        // スマホ用：3レーン（左=Easy / 中=Normal / 右=Hard）
-        const laneXRatios = [0.25, 0.5, 0.75];
-        function snapToLaneX(x) {
-            if (!isMobile) return x;
-            let best = laneXRatios[0] * render.options.width;
-            let bestDist = Math.abs(x - best);
-            for (let i = 1; i < laneXRatios.length; i++) {
-                const lx = laneXRatios[i] * render.options.width;
-                const d = Math.abs(x - lx);
-                if (d < bestDist) { bestDist = d; best = lx; }
-            }
-            return best;
-        }
-
         // 地面を作成
-        const ground = Bodies.rectangle(425, 490, 850, 20, { 
+        const ground = Bodies.rectangle(canvasWidth / 2, canvasHeight - 10, canvasWidth, 20, { 
             isStatic: true,
             render: {
                 fillStyle: '#8B4513'
@@ -245,13 +261,13 @@
         World.add(world, ground);
 
         // 左右の壁
-        const leftWall = Bodies.rectangle(10, 250, 20, 500, { 
+        const leftWall = Bodies.rectangle(10, canvasHeight / 2, 20, canvasHeight, { 
             isStatic: true,
             render: {
                 fillStyle: '#8B4513'
             }
         });
-        const rightWall = Bodies.rectangle(840, 250, 20, 500, { 
+        const rightWall = Bodies.rectangle(canvasWidth - 10, canvasHeight / 2, 20, canvasHeight, { 
             isStatic: true,
             render: {
                 fillStyle: '#8B4513'
@@ -275,54 +291,16 @@
             return angle > 0.26; // 約15度
         }
 
-        // 初期配置：縦6個×横10列のドミノを作成
+        // 初期配置：縦6個×横の列数（スマホは3列、PCは10列）のドミノを作成
         function createInitialDominoes() {
+            const rows = 6; // 縦に積む数
+            const cols = isMobile ? 3 : 10; // スマホは3列、PCは10列
             const dominoWidth = 15;
             const dominoHeight = 80;
-            const startY = 400; // 開始位置Y（地面から少し上）
+            const startX = isMobile ? 60 : 100; // 開始位置X
+            const startY = canvasHeight - 100; // 開始位置Y（地面から少し上）
+            const spacingX = isMobile ? 100 : 70; // 列間の間隔
             const spacingY = dominoHeight + 2; // 縦の間隔（少し重ねる）
-
-            // スマホ版：3レーンに難易度を振り分け（左=Easy / 中=Normal / 右=Hard）
-            if (isMobile) {
-                const rowsByLane = [4, 6, 8];
-                const laneColors = ['#4CAF50', '#FFC107', '#F44336']; // 緑/黄/赤
-                const lanePhysics = [
-                    { friction: 0.9, restitution: 0.05, angleJitter: 0.0 },   // Easy: 安定
-                    { friction: 0.8, restitution: 0.1,  angleJitter: 0.01 },  // Normal
-                    { friction: 0.6, restitution: 0.15, angleJitter: 0.03 }   // Hard: ちょい不安定
-                ];
-
-                for (let lane = 0; lane < 3; lane++) {
-                    const x = laneXRatios[lane] * render.options.width;
-                    for (let row = 0; row < rowsByLane[lane]; row++) {
-                        const y = startY - row * spacingY;
-                        const p = lanePhysics[lane];
-                        const domino = Bodies.rectangle(x, y, dominoWidth, dominoHeight, {
-                            density: 0.005,
-                            friction: p.friction,
-                            restitution: p.restitution,
-                            render: { fillStyle: laneColors[lane] }
-                        });
-
-                        // Hardほど、ほんの少しだけ初期角度に揺らぎ（スマホの「難しい感」）
-                        if (p.angleJitter > 0) {
-                            const a = (Math.random() * 2 - 1) * p.angleJitter;
-                            Body.setAngle(domino, a);
-                        }
-
-                        domino.isInitial = true;
-                        dominoes.push(domino);
-                        World.add(world, domino);
-                    }
-                }
-                return;
-            }
-
-            // PC版：縦6個×横10列のドミノを作成（従来どおり）
-            const rows = 6; // 縦に積む数
-            const cols = 10; // 横の列数
-            const startX = 100; // 開始位置X
-            const spacingX = 70; // 列間の間隔
 
             const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788'];
 
@@ -425,9 +403,8 @@
             
             if (mode === 'place') {
                 // ドミノを配置（地面より上にのみ）
-                if (y < 450) {
-                    const sx = snapToLaneX(x);
-                    createDomino(sx, y);
+                if (y < canvasHeight - 50) {
+                    createDomino(x, y);
                 }
             } else if (mode === 'ball') {
                 // ボールを投下
