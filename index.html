@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ドミノ倒しゲーム</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        #container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 900px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin: 0 0 20px 0;
+            font-size: 28px;
+        }
+        
+        #gameCanvas {
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair;
+            background: linear-gradient(to bottom, #e3f2fd 0%, #fff9c4 100%);
+        }
+        
+        #controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        #placeMode {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        #placeMode:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        
+        #ballMode {
+            background: #2196F3;
+            color: white;
+        }
+        
+        #ballMode:hover {
+            background: #0b7dda;
+            transform: translateY(-2px);
+        }
+        
+        #clearBtn {
+            background: #f44336;
+            color: white;
+        }
+        
+        #clearBtn:hover {
+            background: #da190b;
+            transform: translateY(-2px);
+        }
+        
+        #resetBtn {
+            background: #FF9800;
+            color: white;
+        }
+        
+        #resetBtn:hover {
+            background: #e68900;
+            transform: translateY(-2px);
+        }
+        
+        .active {
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 0 0 6px currentColor;
+        }
+        
+        #info {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 18px;
+            color: #333;
+            font-weight: bold;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 8px;
+        }
+        
+        #score {
+            text-align: center;
+            margin-top: 15px;
+            padding: 15px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 8px;
+            border: 2px solid #4CAF50;
+        }
+        
+        #instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #e8eaf6;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        
+        #instructions h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        
+        #instructions ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        #instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>🎲 ドミノ倒しゲーム</h1>
+        
+        <canvas id="gameCanvas" width="850" height="500"></canvas>
+        
+        <div id="info">モード: ドミノ配置</div>
+        
+        <div id="score">
+            <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 20px;">
+                <div>
+                    <div style="font-size: 24px; font-weight: bold; color: #4CAF50;">
+                        🏆 ドミノ: <span id="successCount">0</span> 個
+                    </div>
+                    <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                        初期配置を崩さず追加
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 24px; font-weight: bold; color: #2196F3;">
+                        ⚽ ボール: <span id="ballCount">0</span> 個
+                    </div>
+                    <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                        投下した数
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="controls">
+            <button id="placeMode" class="active">🎯 ドミノ配置</button>
+            <button id="ballMode">⚽ ボール投下</button>
+            <button id="clearBtn">🗑️ 全てクリア</button>
+            <button id="resetBtn">🔄 リセット</button>
+        </div>
+        
+        <div id="instructions">
+            <h3>📖 遊び方</h3>
+            <ul>
+                <li><strong>目標:</strong> 初期配置のドミノを崩さずに、できるだけ多くのドミノを追加しよう！</li>
+                <li><strong>初期配置:</strong> 縦6個×横10列のカラフルなドミノタワーが配置されています</li>
+                <li><strong>追加ドミノ:</strong> クリックで緑色のドミノを追加できます（倒れずに置けた数がスコアになります）</li>
+                <li><strong>ボール投下:</strong> モードを切り替えてボールを落とせます（投下した数もカウントされます）</li>
+                <li><strong>ゲームオーバー:</strong> 初期配置のドミノが倒れるとゲームオーバー</li>
+                <li><strong>リセット:</strong> 初期状態に戻してスコアもリセットします</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const { Engine, Render, World, Bodies, Mouse, MouseConstraint, Runner, Body, Events } = Matter;
+
+        // エンジンとレンダラーの作成
+        const engine = Engine.create();
+        const world = engine.world;
+        world.gravity.y = 1;
+
+        const canvas = document.getElementById('gameCanvas');
+        const render = Render.create({
+            canvas: canvas,
+            engine: engine,
+            options: {
+                width: 850,
+                height: 500,
+                wireframes: false,
+                background: 'transparent'
+            }
+        });
+
+        // 地面を作成
+        const ground = Bodies.rectangle(425, 490, 850, 20, { 
+            isStatic: true,
+            render: {
+                fillStyle: '#8B4513'
+            }
+        });
+        World.add(world, ground);
+
+        // 左右の壁
+        const leftWall = Bodies.rectangle(10, 250, 20, 500, { 
+            isStatic: true,
+            render: {
+                fillStyle: '#8B4513'
+            }
+        });
+        const rightWall = Bodies.rectangle(840, 250, 20, 500, { 
+            isStatic: true,
+            render: {
+                fillStyle: '#8B4513'
+            }
+        });
+        World.add(world, [leftWall, rightWall]);
+
+        // ドミノとボールの配列
+        let dominoes = [];
+        let balls = [];
+        let mode = 'place'; // 'place' or 'ball'
+        let addedDominoes = []; // 追加したドミノ
+        let successCount = 0; // 成功カウント
+        let ballCount = 0; // ボールカウント
+        let gameOver = false; // ゲームオーバーフラグ
+
+        // ドミノが倒れたかどうかを判定（角度で判定）
+        function isDominoFallen(domino) {
+            const angle = Math.abs(domino.angle);
+            // 15度以上傾いたら倒れたと判定
+            return angle > 0.26; // 約15度
+        }
+
+        // 初期配置：縦6個×横10列のドミノを作成
+        function createInitialDominoes() {
+            const rows = 6; // 縦に積む数
+            const cols = 10; // 横の列数
+            const dominoWidth = 15;
+            const dominoHeight = 80;
+            const startX = 100; // 開始位置X
+            const startY = 400; // 開始位置Y（地面から少し上）
+            const spacingX = 70; // 列間の間隔
+            const spacingY = dominoHeight + 2; // 縦の間隔（少し重ねる）
+
+            const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788'];
+
+            for (let col = 0; col < cols; col++) {
+                for (let row = 0; row < rows; row++) {
+                    const x = startX + col * spacingX;
+                    const y = startY - row * spacingY;
+                    const domino = Bodies.rectangle(x, y, dominoWidth, dominoHeight, {
+                        density: 0.005,
+                        friction: 0.8,
+                        restitution: 0.1,
+                        render: {
+                            fillStyle: colors[col % colors.length]
+                        }
+                    });
+                    domino.isInitial = true; // 初期配置フラグ
+                    dominoes.push(domino);
+                    World.add(world, domino);
+                }
+            }
+        }
+
+        // 物理演算の更新ごとにチェック
+        Events.on(engine, 'afterUpdate', () => {
+            if (gameOver) return;
+
+            // 初期配置のドミノが倒れていないかチェック
+            for (let domino of dominoes) {
+                if (domino.isInitial && isDominoFallen(domino)) {
+                    gameOver = true;
+                    document.getElementById('info').textContent = '❌ ゲームオーバー！初期配置が崩れました';
+                    document.getElementById('info').style.background = '#ffcdd2';
+                    document.getElementById('info').style.color = '#c62828';
+                    return;
+                }
+            }
+
+            // 追加したドミノが倒れたらカウントから除外
+            addedDominoes = addedDominoes.filter(domino => {
+                if (!isDominoFallen(domino)) {
+                    return true;
+                } else {
+                    // 倒れたのでカウントから除外
+                    return false;
+                }
+            });
+        });
+
+        // 初期配置を実行
+        createInitialDominoes();
+
+        // ドミノを作成する関数
+        function createDomino(x, y) {
+            if (gameOver) {
+                alert('ゲームオーバーです。リセットしてください。');
+                return;
+            }
+
+            const domino = Bodies.rectangle(x, y, 15, 80, {
+                density: 0.005,
+                friction: 0.8,
+                restitution: 0.1,
+                render: {
+                    fillStyle: '#4CAF50' // 追加したドミノは緑色
+                }
+            });
+            domino.isInitial = false; // 追加したドミノフラグ
+            dominoes.push(domino);
+            addedDominoes.push(domino);
+            World.add(world, domino);
+            
+            // 成功カウントを更新
+            successCount++;
+            document.getElementById('successCount').textContent = successCount;
+        }
+
+        // ボールを作成する関数
+        function createBall(x, y) {
+            const ball = Bodies.circle(x, y, 20, {
+                density: 0.02,
+                friction: 0.5,
+                restitution: 0.8,
+                render: {
+                    fillStyle: '#FF5722'
+                }
+            });
+            balls.push(ball);
+            World.add(world, ball);
+            
+            // ボールカウントを更新
+            ballCount++;
+            document.getElementById('ballCount').textContent = ballCount;
+        }
+
+        // キャンバスクリック時の処理
+        canvas.addEventListener('click', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            if (mode === 'place') {
+                // ドミノを配置（地面より上にのみ）
+                if (y < 450) {
+                    createDomino(x, y);
+                }
+            } else if (mode === 'ball') {
+                // ボールを投下
+                createBall(x, y);
+            }
+        });
+
+        // モード切替ボタン
+        document.getElementById('placeMode').addEventListener('click', () => {
+            mode = 'place';
+            document.getElementById('info').textContent = 'モード: ドミノ配置';
+            document.getElementById('placeMode').classList.add('active');
+            document.getElementById('ballMode').classList.remove('active');
+            canvas.style.cursor = 'crosshair';
+        });
+
+        document.getElementById('ballMode').addEventListener('click', () => {
+            mode = 'ball';
+            document.getElementById('info').textContent = 'モード: ボール投下';
+            document.getElementById('ballMode').classList.add('active');
+            document.getElementById('placeMode').classList.remove('active');
+            canvas.style.cursor = 'pointer';
+        });
+
+        // 全てクリアボタン
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            // ドミノを削除
+            dominoes.forEach(domino => {
+                World.remove(world, domino);
+            });
+            dominoes = [];
+            
+            // ボールを削除
+            balls.forEach(ball => {
+                World.remove(world, ball);
+            });
+            balls = [];
+            
+            // スコアもリセット
+            addedDominoes = [];
+            successCount = 0;
+            ballCount = 0;
+            gameOver = false;
+            document.getElementById('successCount').textContent = '0';
+            document.getElementById('ballCount').textContent = '0';
+            document.getElementById('info').textContent = 'モード: ドミノ配置';
+            document.getElementById('info').style.background = '#f0f0f0';
+            document.getElementById('info').style.color = '#333';
+        });
+
+        // リセットボタン
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            // 全てのドミノとボールを削除
+            dominoes.forEach(domino => {
+                World.remove(world, domino);
+            });
+            balls.forEach(ball => {
+                World.remove(world, ball);
+            });
+            
+            // エンジンをクリア
+            Engine.clear(engine);
+            
+            // 地面と壁を再追加
+            World.add(world, [ground, leftWall, rightWall]);
+            
+            // 配列とスコアをクリア
+            dominoes = [];
+            balls = [];
+            addedDominoes = [];
+            successCount = 0;
+            ballCount = 0;
+            gameOver = false;
+            
+            // UI更新
+            document.getElementById('successCount').textContent = '0';
+            document.getElementById('ballCount').textContent = '0';
+            document.getElementById('info').textContent = 'モード: ドミノ配置';
+            document.getElementById('info').style.background = '#f0f0f0';
+            document.getElementById('info').style.color = '#333';
+            
+            // 初期配置を再作成
+            createInitialDominoes();
+        });
+
+        // レンダリング開始
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+    </script>
+</body>
+</html>
